@@ -40,6 +40,7 @@ import org.osgi.service.cm.ConfigurationAdmin;
  * 
  * @author Edward Yakop
  * @author Makas Tzavellas
+ * @author Lars Heppler
  */
 final class ConfigurationAdminFacade
 {
@@ -54,11 +55,12 @@ final class ConfigurationAdminFacade
      * System property to set where the ConfigurationAdminFacade should load the configuration files from.
      */
     public static final String BUNDLES_CONFIGURATION_LOCATION = "bundles.configuration.location";
+    public static final String OSGI_CONFIGURATION_AREA = "osgi.configuration.area";
     private final List<IConfigurationFileHandler> m_handlers;
     private ConfigurationAdmin m_configAdminService;
     private final ManagedFactoryPropertiesProcessor m_processor = new ManagedFactoryPropertiesProcessor();
     /**
-     * Property resolver used to resolve properies.
+     * Property resolver used to resolve properties.
      */
     private final PropertyResolver m_propertyResolver;
 
@@ -261,7 +263,7 @@ final class ConfigurationAdminFacade
             else
             {
                 Configuration conf = m_configAdminService.getConfiguration( servicePid, null );
-                conf.update(prop);
+                conf.update((Dictionary)prop);
             }
         }
 
@@ -270,24 +272,41 @@ final class ConfigurationAdminFacade
 
     private File getConfigDir()
     {
-        String configArea = m_propertyResolver.getProperty( BUNDLES_CONFIGURATION_LOCATION );
+		String configArea = m_propertyResolver.getProperty( OSGI_CONFIGURATION_AREA );
 
         // Only run the configuration changes if the configArea is set.
+		File dir = null;
+		if ( configArea != null )
+		{
+			try
+			{
+				dir = FileUtils.toFile( new URL( configArea ) );
+			}
+			catch ( MalformedURLException e )
+			{
+				LOGGER.error("Configuration area [" + configArea + "] is not a valid URL.", e );
+			}
+		} 
+		else
+		{
+			LOGGER.info( "System property [" + OSGI_CONFIGURATION_AREA + "] is not defined. Using fallback." );
+			// fallback to previous behavior
+			configArea = m_propertyResolver.getProperty( BUNDLES_CONFIGURATION_LOCATION );
         if( configArea == null )
         {
             LOGGER.info( "System property [" + BUNDLES_CONFIGURATION_LOCATION + "] is not defined." );
             LOGGER.info( "Using default configurations location [" + DEFAULT_CONFIGURATION_LOCATION + "]." );
             configArea = DEFAULT_CONFIGURATION_LOCATION;
         }
-
-        LOGGER.info( "Using configuration from [" + configArea + "]" );
-        File dir = new File(configArea);
+			dir = new File( configArea );
+		}
         if( !dir.exists() )
         {
             String absolutePath = dir.getAbsolutePath();
             LOGGER.error( "Configuration area [" + absolutePath + "] does not exist. Unable to load properties." );
             return null;
         }
+		LOGGER.info( "Using configuration from [" + dir.getAbsolutePath() + "]" );
         return dir;
     }
 
